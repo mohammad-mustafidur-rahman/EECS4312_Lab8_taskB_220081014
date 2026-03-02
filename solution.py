@@ -3,14 +3,29 @@
 
 """
 Task B: Event Registration with Waitlist (Stub)
-
-Implement an event registration module with:
-  - fixed capacity
-  - FIFO waitlist
-  - promotion on cancellation (earliest waitlisted user)
-  - duplicate prevention
-  - status queries
-See the lab handout for full requirements.
+In this lab, you will design and implement an Event Registration with Waitlist system using an LLM assistant as your primary programming collaborator. You are asked to implement a Python module that manages registration for a single event with a fixed capacity. The system must:
+•	Accept a fixed capacity.
+•	Register users until capacity is reached.
+•	Place additional users into a FIFO waitlist.
+•	Automatically promote the earliest waitlisted user when a registered user cancels.
+•	Prevent duplicate registrations.
+•	Allow users to query their current status.
+The system must ensure that:
+•	The number of registered users never exceeds capacity.
+•	Waitlist ordering preserves FIFO behavior.
+•	Promotions occur deterministically under identical operation sequences.
+The module must preserve the following invariants:
+•	A user may not appear more than once in the system.
+•	A user may not simultaneously exist in multiple states.
+•	The system state must remain consistent after every operation.
+The system must correctly handle non-trivial scenarios such as:
+•	Multiple cancellations in sequence.
+•	Users attempting to re-register after canceling.
+•	Waitlisted users canceling before promotion.
+•	Capacity equal to zero.
+•	Simultaneous or rapid consecutive operations.
+•	Queries during state transitions.
+The output consists of the updated registration state and ordered lists of registered and waitlisted users after each operation.
 """
 
 from dataclasses import dataclass
