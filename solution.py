@@ -114,39 +114,36 @@ class EventRegistration:
         #raise NotImplementedError("register not implemented yet")
 
     def cancel(self, user_id: str) -> None:
-        """
-        Cancel a user:
-          - if registered then remove and promote earliest waitlisted user (if any)
-          - if waitlisted then remove from waitlist
-        Raises:
-            NotFound (if required by handout)
-        """
         self._validate_user_id(user_id)
 
         if user_id in self._registered_set:
-            self._registered_set.remove(user_id)
             self._registered.remove(user_id)
-
-            if len(self._registered) < self._capacity and self._waitlist:
-                 promoted = self._waitlist.pop(0)
-                 self._waitlist_set.remove(promoted)
-                 self._registered.append(promoted)
-                 self._registered_set.add(promoted)
-
+            self._registered_set.remove(user_id)
+            
+            # Helper handles the "Move" logic
+            self._maybe_promote()
+            
             self._assert_invariants()
             return
 
         if user_id in self._waitlist_set:
-             self._waitlist_set.remove(user_id)
-             self._waitlist.remove(user_id)
-             self._assert_invariants()
-             return
+            self._waitlist.remove(user_id)
+            self._waitlist_set.remove(user_id)
+            self._assert_invariants()
+            return
 
-        # Not found -> raise
-        self._assert_invariants()
+        # Explicitly required by your current test suite
         raise NotFound(f"user '{user_id}' not found")
-        #raise NotImplementedError("cancel not implemented yet")
-
+    
+    def _maybe_promote(self) -> None:
+        """Internal helper to fill a vacancy if possible."""
+        if self._waitlist and len(self._registered) < self._capacity:
+            promoted_user = self._waitlist.pop(0)
+            self._waitlist_set.remove(promoted_user)
+            
+            self._registered.append(promoted_user)
+            self._registered_set.add(promoted_user)
+            
     def status(self, user_id: str) -> UserStatus:
         """
         Return status of a user:
