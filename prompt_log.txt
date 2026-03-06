@@ -706,4 +706,518 @@ def test_boomerang_user_registration():
     assert "User_A" in system._waitlist_set
 Does this clarify how the duplicate logic and the promotion logic should interact during a full cycle?
 --------------------------------------------------
+Prompt #12:## Student Name: Mohammad Mustafidur Rahman
+## Student ID: 220081014
+
+"""
+Task B: Event Registration with Waitlist (Stub)
+In this lab, you will design and implement an Event Registration with Waitlist system using an LLM assistant as your primary programming collaborator. 
+You are asked to implement a Python module that manages registration for a single event with a fixed capacity. 
+The system must:
+• Accept a fixed capacity.
+• Register users until capacity is reached.
+• Place additional users into a FIFO waitlist.
+• Automatically promote the earliest waitlisted user when a registered user cancels.
+• Prevent duplicate registrations.
+• Allow users to query their current status.
+
+The system must ensure that:
+• The number of registered users never exceeds capacity.
+• Waitlist ordering preserves FIFO behavior.
+• Promotions occur deterministically under identical operation sequences.
+
+The module must preserve the following invariants:
+• A user may not appear more than once in the system.
+• A user may not simultaneously exist in multiple states.
+• The system state must remain consistent after every operation.
+
+The system must correctly handle non-trivial scenarios such as:
+• Multiple cancellations in sequence.
+• Users attempting to re-register after canceling.
+• Waitlisted users canceling before promotion.
+• Capacity equal to zero.
+• Simultaneous or rapid consecutive operations.
+• Queries during state transitions.
+
+The output consists of the updated registration state and ordered lists of registered and waitlisted users after each operation.
+"""
+
+from dataclasses import dataclass
+from typing import List, Optional
+
+
+class DuplicateRequest(Exception):
+    """Raised if a user tries to register but is already registered or waitlisted."""
+    pass
+
+
+class NotFound(Exception):
+    """Raised if a user cannot be found for cancellation (if required by handout)."""
+    pass
+
+
+@dataclass(frozen=True)
+class UserStatus:
+    """
+    state:
+      - "registered"
+      - "waitlisted"
+      - "none"
+    position: 1-based waitlist position if waitlisted; otherwise None
+    """
+    state: str
+    position: Optional[int] = None
+
+
+class EventRegistration:
+    """
+    Students must implement this class per the lab handout.
+    Deterministic ordering is required (e.g., FIFO waitlist, predictable registration order).
+    """
+
+    def __init__(self, capacity: int) -> None:
+        """
+            capacity: maximum number of registered users (>= 0)
+        """
+        if not isinstance(capacity, int):
+            raise TypeError("capacity must be an int")
+        if capacity < 0:
+            raise ValueError("capacity must be >= 0")
+
+        self._capacity: int = capacity
+        self._registered: List[str] = []
+        self._waitlist: List[str] = []
+
+        # Fast membership checks for duplicate prevention.
+        self._registered_set = set()
+        self._waitlist_set = set()
+        #raise NotImplementedError("EventRegistration.__init__ not implemented yet")
+
+    def register(self, user_id: str) -> UserStatus:
+        """
+        Register a user:
+          - if capacity available then registered
+          - else put waitlisted (FIFO)
+
+        Raises:
+            DuplicateRequest if user already exists (registered or waitlisted)
+        """
+        self._validate_user_id(user_id)
+
+        if user_id in self._registered_set or user_id in self._waitlist_set:
+            raise DuplicateRequest(f"user '{user_id}' is already registered or waitlisted")
+
+        if len(self._registered) < self._capacity:
+            self._registered.append(user_id)
+            self._registered_set.add(user_id)
+            self._assert_invariants()
+            return UserStatus(state="registered", position=None)
+
+        # capacity full (including when capacity == 0)
+        self._waitlist.append(user_id)
+        self._waitlist_set.add(user_id)
+        self._assert_invariants()
+        return UserStatus(state="waitlisted", position=len(self._waitlist))
+
+        #raise NotImplementedError("register not implemented yet")
+
+    def cancel(self, user_id: str) -> None:
+        """
+        Cancel a user:
+          - if registered then remove and promote earliest waitlisted user (if any)
+          - if waitlisted then remove from waitlist
+        Raises:
+            NotFound (if required by handout)
+        """
+        self._validate_user_id(user_id)
+
+        if user_id in self._registered_set:
+            self._registered_set.remove(user_id)
+            self._registered.remove(user_id)
+
+            if len(self._registered) < self._capacity and self._waitlist:
+                 promoted = self._waitlist.pop(0)
+                 self._waitlist_set.remove(promoted)
+                 self._registered.append(promoted)
+                 self._registered_set.add(promoted)
+
+            self._assert_invariants()
+            return
+
+        if user_id in self._waitlist_set:
+             self._waitlist_set.remove(user_id)
+             self._waitlist.remove(user_id)
+             self._assert_invariants()
+             return
+
+        # Not found -> raise
+        self._assert_invariants()
+        raise NotFound(f"user '{user_id}' not found")
+        #raise NotImplementedError("cancel not implemented yet")
+
+    def status(self, user_id: str) -> UserStatus:
+        """
+        Return status of a user:
+          - registered
+          - waitlisted with position (1-based)
+          - none
+        """
+        self._validate_user_id(user_id)
+
+        if user_id in self._registered_set:
+            return UserStatus(state="registered", position=None)
+
+        if user_id in self._waitlist_set:
+            # 1-based position
+            pos = self._waitlist.index(user_id) + 1
+            return UserStatus(state="waitlisted", position=pos)
+
+        return UserStatus(state="none", position=None)
+        #raise NotImplementedError("status not implemented yet")
+
+    def snapshot(self) -> dict[str, object]:
+        return {
+            "capacity": self._capacity,
+            "registered": list(self._registered),
+            "waitlist": list(self._waitlist),
+        }
+
+    @staticmethod
+    def _validate_user_id(user_id: str) -> None:
+        if not isinstance(user_id, str):
+            raise TypeError("user_id must be a str")
+        if user_id.strip() == "":
+            raise ValueError("user_id must be a non-empty string")
+
+    def _assert_invariants(self) -> None:
+        # 1. Registered size <= capacity
+        assert len(self._registered) <= self._capacity, "Invariant violated: registered exceeds capacity"
+
+        # 2. No user appears in both lists
+        assert self._registered_set.isdisjoint(self._waitlist_set), "Invariant violated: user in both registered and waitlist"
+
+        # 3. Each user appears at most once overall
+        assert len(self._registered_set) == len(self._registered), "Invariant violated: duplicate in registered list"
+        assert len(self._waitlist_set) == len(self._waitlist), "Invariant violated: duplicate in waitlist"
+        #raise NotImplementedError("snapshot not implemented yet")
+
+
+Does this look okay to you? I will give you my test cases too. Check for ambiguity with the requirements.
+Response #12:Your implementation is exceptionally clean and aligns perfectly with the updated requirements. You’ve successfully translated the abstract constraints into a concrete, deterministic system.
+
+Why this implementation is solid:
+
+State Management: By using both a List (for ordering) and a Set (for O(1) lookups), you've balanced the FIFO requirement with the Duplicate Prevention requirement efficiently.
+
+Waitlist Position Logic: In the status method, using self._waitlist.index(user_id) + 1 correctly converts a 0-based list index into the 1-based position required by the UserStatus dataclass.
+
+Validation: Your _validate_user_id method prevents "empty string" registrations, which protects against a common source of logic errors in identity-based systems.
+
+Promotion Logic: In cancel, the specific order of pop(0) followed by append to the registered list ensures the "Move" is atomic from the system's perspective before the invariants are checked.
+
+Potential Ambiguities / Observations
+
+While the code is great, here are two minor points where "the handout" might differ from your current logic:
+
+The NotFound Raise: In our previous discussion, we looked at a version that ignored missing users. Your current code raises NotFound.
+
+Check: If your instructor's automated tests expect a "silent" return for non-existent users (like AC6 implied: "no changes occur"), this raise might cause a test failure. If the handout specifically says "Raise if not found," then your code is correct.
+
+Sequential vs. Bulk Promotion: Your code promotes "exactly one" user. If capacity were ever modified (which we constrained against in C8), this would break. Since capacity is fixed, "exactly one" is perfectly deterministic.
+
+A Quick Logic Check on status
+
+If a user is promoted from the waitlist to the registered list, their status immediately changes from waitlisted (with a position) to registered (position None). Your status method handles this transition flawlessly because it checks the _registered_set first.
+
+Ready for Test Cases
+
+Your _assert_invariants is a powerful tool here. It will catch any "leaks" where a user is accidentally left in a set after being removed from a list.
+
+I’m ready to review your test cases. Would you like me to check them specifically for boundary conditions (like 0 capacity) or sequential integrity (like multiple cancellations)?
+--------------------------------------------------
+Prompt #13:import pytest
+
+from solution import EventRegistration, UserStatus, DuplicateRequest, NotFound
+
+
+def test_register_until_capacity_then_waitlist_fifo_positions():
+    er = EventRegistration(capacity=2)
+
+    s1 = er.register("u1")
+    s2 = er.register("u2")
+    s3 = er.register("u3")
+    s4 = er.register("u4")
+
+    assert s1 == UserStatus("registered")
+    assert s2 == UserStatus("registered")
+    assert s3 == UserStatus("waitlisted", 1)
+    assert s4 == UserStatus("waitlisted", 2)
+
+    snap = er.snapshot()
+    assert snap["registered"] == ["u1", "u2"]
+    assert snap["waitlist"] == ["u3", "u4"]
+
+
+def test_cancel_registered_promotes_earliest_waitlisted_fifo():
+    er = EventRegistration(capacity=1)
+    er.register("u1")
+    er.register("u2")  # waitlist
+    er.register("u3")  # waitlist
+
+    er.cancel("u1")  # should promote u2
+
+    assert er.status("u1") == UserStatus("none")
+    assert er.status("u2") == UserStatus("registered")
+    assert er.status("u3") == UserStatus("waitlisted", 1)
+
+    snap = er.snapshot()
+    assert snap["registered"] == ["u2"]
+    assert snap["waitlist"] == ["u3"]
+
+
+def test_duplicate_register_raises_for_registered_and_waitlisted():
+    er = EventRegistration(capacity=1)
+    er.register("u1")
+    with pytest.raises(DuplicateRequest):
+        er.register("u1")
+
+    er.register("u2")  # waitlisted
+    with pytest.raises(DuplicateRequest):
+        er.register("u2")
+
+
+def test_waitlisted_cancel_removes_and_updates_positions():
+    er = EventRegistration(capacity=1)
+    er.register("u1")
+    er.register("u2")  # waitlist pos1
+    er.register("u3")  # waitlist pos2
+
+    er.cancel("u2")    # remove from waitlist
+
+    assert er.status("u2") == UserStatus("none")
+    assert er.status("u3") == UserStatus("waitlisted", 1)
+
+    snap = er.snapshot()
+    assert snap["registered"] == ["u1"]
+    assert snap["waitlist"] == ["u3"]
+
+
+def test_capacity_zero_all_waitlisted_and_promotion_never_happens():
+    er = EventRegistration(capacity=0)
+    assert er.register("u1") == UserStatus("waitlisted", 1)
+    assert er.register("u2") == UserStatus("waitlisted", 2)
+
+    # No one can ever be registered when capacity=0
+    assert er.status("u1") == UserStatus("waitlisted", 1)
+    assert er.status("u2") == UserStatus("waitlisted", 2)
+    assert er.snapshot()["registered"] == []
+
+    # Cancel unknown should raise NotFound
+    with pytest.raises(NotFound):
+        er.cancel("missing")
+
+
+
+#################################################################################
+# Add your own additional tests here to cover more cases and edge cases as needed.
+#################################################################################
+
+def test_reregister_after_cancel_is_allowed_and_works():
+    # Validates: C3 (no duplicates in system at a time), C5 (consistent state)
+    er = EventRegistration(capacity=1)
+
+    er.register("u1")
+    er.cancel("u1")  # u1 removed
+
+    # Re-register should now succeed (not a duplicate anymore)
+    s = er.register("u1")
+    assert s == UserStatus("registered")
+    assert er.snapshot()["registered"] == ["u1"]
+    assert er.snapshot()["waitlist"] == []
+
+
+def test_multiple_cancellations_in_sequence_promote_fifo_each_time():
+    # Validates: C1 (registered <= capacity), C2 (FIFO waitlist), C5 (consistent state)
+    er = EventRegistration(capacity=2)
+
+    er.register("u1")
+    er.register("u2")
+    er.register("u3")  # waitlist
+    er.register("u4")  # waitlist
+
+    # Cancel u1 -> promote u3
+    er.cancel("u1")
+    snap1 = er.snapshot()
+    assert snap1["registered"] == ["u2", "u3"]
+    assert snap1["waitlist"] == ["u4"]
+
+    # Cancel u2 -> promote u4
+    er.cancel("u2")
+    snap2 = er.snapshot()
+    assert snap2["registered"] == ["u3", "u4"]
+    assert snap2["waitlist"] == []
+
+
+def test_cancel_waitlisted_does_not_trigger_promotion():
+    # Validates: C2 (FIFO), C5 (consistent state)
+    er = EventRegistration(capacity=1)
+
+    er.register("u1")  # registered
+    er.register("u2")  # waitlisted
+    er.register("u3")  # waitlisted
+
+    # Cancel waitlisted user u2; should NOT change registered list
+    er.cancel("u2")
+
+    assert er.snapshot()["registered"] == ["u1"]
+    assert er.snapshot()["waitlist"] == ["u3"]
+    assert er.status("u3") == UserStatus("waitlisted", 1)
+
+
+def test_duplicate_after_promotion_is_rejected():
+    # Validates: C3 (no duplicates), C4 (not in multiple states)
+    er = EventRegistration(capacity=1)
+
+    er.register("u1")
+    er.register("u2")  # waitlisted
+
+    er.cancel("u1")    # u2 promoted to registered
+
+    # Now u2 is registered; registering u2 again should raise DuplicateRequest
+    with pytest.raises(DuplicateRequest):
+        er.register("u2")
+
+    assert er.status("u2") == UserStatus("registered")
+
+
+def test_status_none_for_unknown_user_does_not_change_state():
+    # Validates: C5 (state consistency)
+    er = EventRegistration(capacity=2)
+
+    er.register("u1")
+    before = er.snapshot()
+
+    assert er.status("missing") == UserStatus("none")
+    after = er.snapshot()
+
+    assert after == before  # status query must not mutate state
+
+
+def test_invalid_user_id_rejected_empty_string():
+    # Validates: C5 (consistent state), input validity implied by spec (non-empty user_id)
+    er = EventRegistration(capacity=1)
+
+    with pytest.raises(ValueError):
+        er.register("")
+
+    with pytest.raises(ValueError):
+        er.status("   ")
+
+    with pytest.raises(ValueError):
+        er.cancel("")
+
+
+def test_invalid_capacity_negative_rejected():
+    # Validates: C6 (capacity must be non-negative integer)
+    with pytest.raises(ValueError):
+        EventRegistration(capacity=-1)
+
+
+def test_cancel_unknown_raises_notfound_if_required_by_tests():
+    # Validates: test expectation about NotFound + C5 (consistent behavior)
+    er = EventRegistration(capacity=1)
+
+    # No users exist; cancel should raise NotFound per your fixed tests
+    with pytest.raises(NotFound):
+        er.cancel("missing")
+
+These are the test cases. I have added 8 ish test cases of my own including the one you gave me. Are they good enough to cover all the requirements that are needed?
+Response #13: Your test suite is comprehensive and professional. You have successfully covered the primary "happy paths," the boundary conditions (capacity 0), and the specific constraints (no duplicates, FIFO integrity).
+
+By adding these 8 tests, you have effectively transformed the abstract Functional Requirements and Constraints into a verifiable suite. Here is a breakdown of why this suite is "good enough" to guarantee a robust implementation:
+
+1. Verification of the "Promotion Loop"
+
+Your test_multiple_cancellations_in_sequence_promote_fifo_each_time is excellent. It ensures that the system doesn't just work for a single promotion but maintains state through a sequence of changes. This specifically validates C1 and C2.
+
+2. Guarding the FIFO Order
+
+test_waitlisted_cancel_removes_and_updates_positions is a critical test. It confirms that if someone leaves the middle of the waitlist, the "queue" doesn't break and the next person's position is updated correctly. This is often where O(N) list operations can go wrong if not handled carefully.
+
+3. Identity and State Transitions
+
+The test_duplicate_after_promotion_is_rejected and test_reregister_after_cancel_is_allowed_and_works pair perfectly. They ensure:
+
+Duplicate Prevention: A user cannot "double-dip" even after their status changes.
+
+Clean Slate: Once a user is gone, the system truly "forgets" them, allowing them to return. This satisfies C3 and C9.
+
+4. Input Sanitization
+
+The test_invalid_user_id_rejected_empty_string and test_invalid_capacity_negative_rejected ensure your system is "fail-fast." It rejects bad data before it can corrupt the internal state, satisfying C6.
+
+5. Final Check on Ambiguity (NotFound)
+
+Your test test_cancel_unknown_raises_notfound_if_required_by_tests matches your implementation's raise NotFound. Since you have a specific test for it, your behavior is now defined and deterministic. If a grading script expects a silent return, you'll only have to change this one test and one line in your cancel method.
+
+Is anything missing?
+
+You have covered almost every logical branch. If you wanted to be 100% exhaustive (the "101% score" approach), you could add one final check:
+
+Waitlist Promotion into Capacity 0: You have a test for capacity=0 registration, but you could verify that if a user is on a waitlist (perhaps because capacity was 0) and a "registered" user is canceled (though none should exist), the system stays stable. Since your register prevents any registered users when capacity is 0, this is likely already covered by your logic.
+
+Your implementation and test suite are ready for submission. Would you like me to help you summarize the "Implementation Decisions" (like the use of Sets for O(1) lookups) if you need to write a brief report for Mohammad Mustafidur Rahman's lab?
+--------------------------------------------------
+Prompt #14:Can you tell what i have to change to make it better?
+Response #14:Your current implementation is high-quality and technically correct, but if you want to move from "working code" to "production-grade" code, there are three specific areas where you can make it better.
+
+1. Optimize the Waitlist Cancellation (O(1) vs O(N))
+
+In your cancel method, you use self._waitlist.remove(user_id).
+
+The Issue: Python's list.remove() is an O(N) operation because it must scan the entire list to find the user and then shift every subsequent element to close the "hole."
+
+The Better Way: While a O(N) shift is necessary to maintain a contiguous list for your status() 1-based positioning, you could use a collections.deque for the waitlist. A deque is optimized for O(1) pops from the front (the "promotion" part of your logic), which is the most frequent operation in a high-traffic registration system.
+
+2. Efficiency in status()
+
+Currently, your status method does this:
+pos = self._waitlist.index(user_id) + 1
+
+The Issue: list.index() is another O(N) scan. If a user is at the end of a 10,000-person waitlist, the system has to look at every single entry to tell them their position.
+
+The Better Way: You could maintain a third dictionary self._waitlist_positions = {user_id: position}. However, this adds significant complexity because every time someone cancels, you would have to update the positions for everyone behind them.
+
+The Verdict: For a lab assignment, your current O(N) approach is actually the safest and most deterministic. Only change this if you expect the waitlist to be massive.
+
+3. Encapsulation and "Move" Atomicity
+
+In your cancel method, the promotion logic is slightly "noisy." You are manually adding/removing from sets and lists in four different lines.
+
+The Better Way: Create a private helper method _promote_user().
+
+Why it’s better: It ensures that the "Promotion" logic is isolated. If you ever change how a user is promoted (e.g., adding a timestamp), you only have to change it in one place.
+
+4. Refined cancel logic (Minor)
+
+In your cancel function, you have:
+
+Python
+if user_id in self._registered_set:
+    # ... remove and promote ...
+    return # <--- Good
+
+if user_id in self._waitlist_set:
+    # ... remove ...
+    return # <--- Good
+This is excellent. One small "pro" tip: You could use a try...finally block around your _assert_invariants(). This ensures that even if an unexpected error occurs during a removal, the system still tries to check its health before crashing.
+
+Summary of "Better" code structure:
+
+Use deque for the waitlist if performance matters.
+
+Keep the Sets (you already did this, and it's the best decision in the code).
+
+Add a "None" check in the __init__ for capacity to ensure it isn't just an integer, but a positive one (you already have capacity < 0, which is great).
+--------------------------------------------------
 
