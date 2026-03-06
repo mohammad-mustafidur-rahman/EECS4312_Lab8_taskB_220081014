@@ -50,68 +50,39 @@ class NotFound(Exception):
 
 @dataclass(frozen=True)
 class UserStatus:
-    """
-    state:
-      - "registered"
-      - "waitlisted"
-      - "none"
-    position: 1-based waitlist position if waitlisted; otherwise None
-    """
     state: str
     position: Optional[int] = None
 
 
 class EventRegistration:
-    """
-    Students must implement this class per the lab handout.
-    Deterministic ordering is required (e.g., FIFO waitlist, predictable registration order).
-    """
-
     def __init__(self, capacity: int) -> None:
-        """
-            capacity: maximum number of registered users (>= 0)
-        """
         if not isinstance(capacity, int):
             raise TypeError("capacity must be an int")
         if capacity < 0:
             raise ValueError("capacity must be >= 0")
 
-        self._capacity: int = capacity
+        self._capacity = capacity
         self._registered: List[str] = []
         self._waitlist: List[str] = []
-
-        # Fast membership checks for duplicate prevention.
         self._registered_set = set()
         self._waitlist_set = set()
-        #raise NotImplementedError("EventRegistration.__init__ not implemented yet")
 
     def register(self, user_id: str) -> UserStatus:
-        """
-        Register a user:
-          - if capacity available then registered
-          - else put waitlisted (FIFO)
-
-        Raises:
-            DuplicateRequest if user already exists (registered or waitlisted)
-        """
         self._validate_user_id(user_id)
 
         if user_id in self._registered_set or user_id in self._waitlist_set:
-            raise DuplicateRequest(f"user '{user_id}' is already registered or waitlisted")
+            raise DuplicateRequest(f"user '{user_id}' already exists")
 
         if len(self._registered) < self._capacity:
             self._registered.append(user_id)
             self._registered_set.add(user_id)
             self._assert_invariants()
-            return UserStatus(state="registered", position=None)
+            return UserStatus(state="registered")
 
-        # capacity full (including when capacity == 0)
         self._waitlist.append(user_id)
         self._waitlist_set.add(user_id)
         self._assert_invariants()
         return UserStatus(state="waitlisted", position=len(self._waitlist))
-
-        #raise NotImplementedError("register not implemented yet")
 
     def cancel(self, user_id: str) -> None:
         self._validate_user_id(user_id)
@@ -119,52 +90,36 @@ class EventRegistration:
         if user_id in self._registered_set:
             self._registered.remove(user_id)
             self._registered_set.remove(user_id)
-            
-            # Helper handles the "Move" logic
-            self._maybe_promote()
-            
-            self._assert_invariants()
-            return
-
-        if user_id in self._waitlist_set:
+            self._promote_next()
+        elif user_id in self._waitlist_set:
             self._waitlist.remove(user_id)
             self._waitlist_set.remove(user_id)
-            self._assert_invariants()
-            return
+        else:
+            raise NotFound(f"user '{user_id}' not found")
 
-        # Explicitly required by your current test suite
-        raise NotFound(f"user '{user_id}' not found")
-    
-    def _maybe_promote(self) -> None:
-        """Internal helper to fill a vacancy if possible."""
+        self._assert_invariants()
+
+    def _promote_next(self) -> None:
+        """Move the first waitlisted user into registered if space is available."""
         if self._waitlist and len(self._registered) < self._capacity:
             promoted_user = self._waitlist.pop(0)
             self._waitlist_set.remove(promoted_user)
-            
             self._registered.append(promoted_user)
             self._registered_set.add(promoted_user)
-            
+
     def status(self, user_id: str) -> UserStatus:
-        """
-        Return status of a user:
-          - registered
-          - waitlisted with position (1-based)
-          - none
-        """
         self._validate_user_id(user_id)
 
         if user_id in self._registered_set:
-            return UserStatus(state="registered", position=None)
+            return UserStatus(state="registered")
 
         if user_id in self._waitlist_set:
-            # 1-based position
             pos = self._waitlist.index(user_id) + 1
             return UserStatus(state="waitlisted", position=pos)
 
-        return UserStatus(state="none", position=None)
-        #raise NotImplementedError("status not implemented yet")
+        return UserStatus(state="none")
 
-    def snapshot(self) -> dict[str, object]:
+    def snapshot(self) -> dict:
         return {
             "capacity": self._capacity,
             "registered": list(self._registered),
@@ -173,19 +128,11 @@ class EventRegistration:
 
     @staticmethod
     def _validate_user_id(user_id: str) -> None:
-        if not isinstance(user_id, str):
-            raise TypeError("user_id must be a str")
-        if user_id.strip() == "":
+        if not isinstance(user_id, str) or not user_id.strip():
             raise ValueError("user_id must be a non-empty string")
 
     def _assert_invariants(self) -> None:
-        # 1. Registered size <= capacity
-        assert len(self._registered) <= self._capacity, "Invariant violated: registered exceeds capacity"
-
-        # 2. No user appears in both lists
-        assert self._registered_set.isdisjoint(self._waitlist_set), "Invariant violated: user in both registered and waitlist"
-
-        # 3. Each user appears at most once overall
-        assert len(self._registered_set) == len(self._registered), "Invariant violated: duplicate in registered list"
-        assert len(self._waitlist_set) == len(self._waitlist), "Invariant violated: duplicate in waitlist"
-        #raise NotImplementedError("snapshot not implemented yet")
+        assert len(self._registered) <= self._capacity
+        assert self._registered_set.isdisjoint(self._waitlist_set)
+        assert len(self._registered_set) == len(self._registered)
+        assert len(self._waitlist_set) == len(self._waitlist)
