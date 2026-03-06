@@ -69,7 +69,6 @@ class EventRegistration:
 
     def __init__(self, capacity: int) -> None:
         """
-        Args:
             capacity: maximum number of registered users (>= 0)
         """
         if not isinstance(capacity, int):
@@ -81,7 +80,7 @@ class EventRegistration:
         self._registered: List[str] = []
         self._waitlist: List[str] = []
 
-        # Fast membership checks for duplicate prevention / invariants.
+        # Fast membership checks for duplicate prevention.
         self._registered_set = set()
         self._waitlist_set = set()
         #raise NotImplementedError("EventRegistration.__init__ not implemented yet")
@@ -89,8 +88,8 @@ class EventRegistration:
     def register(self, user_id: str) -> UserStatus:
         """
         Register a user:
-          - if capacity available -> registered
-          - else -> waitlisted (FIFO)
+          - if capacity available then registered
+          - else put waitlisted (FIFO)
 
         Raises:
             DuplicateRequest if user already exists (registered or waitlisted)
@@ -117,10 +116,8 @@ class EventRegistration:
     def cancel(self, user_id: str) -> None:
         """
         Cancel a user:
-          - if registered -> remove and promote earliest waitlisted user (if any)
-          - if waitlisted -> remove from waitlist
-          - behavior when user not found depends on handout (raise NotFound or ignore)
-
+          - if registered then remove and promote earliest waitlisted user (if any)
+          - if waitlisted then remove from waitlist
         Raises:
             NotFound (if required by handout)
         """
@@ -171,10 +168,6 @@ class EventRegistration:
         #raise NotImplementedError("status not implemented yet")
 
     def snapshot(self) -> dict[str, object]:
-        """
-        (Optional helper for debugging/tests)
-        Return a deterministic snapshot of internal state.
-        """
         return {
             "capacity": self._capacity,
             "registered": list(self._registered),
