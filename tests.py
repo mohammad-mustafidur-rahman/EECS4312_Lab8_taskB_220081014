@@ -87,69 +87,83 @@ def test_capacity_zero_all_waitlisted_and_promotion_never_happens():
 
 def test_reregister_after_cancel_is_allowed_and_works():
     er = EventRegistration(capacity=1)
+
     er.register("u1")
-    er.cancel("u1") 
-    # Logic check: The sets must be empty for this to pass
+    er.cancel("u1")
+
     s = er.register("u1")
-    assert s.state == "registered"
-    assert er.status("u1").state == "registered"
+
+    assert s == UserStatus("registered")
+    assert er.status("u1") == UserStatus("registered")
+
 
 def test_multiple_cancellations_in_sequence_promote_fifo_each_time():
     er = EventRegistration(capacity=2)
     users = ["u1", "u2", "u3", "u4"]
-    for u in users: er.register(u)
+
+    for user in users:
+        er.register(user)
 
     er.cancel("u1")
-    # Verify u3 took the spot and u4 is now #1
-    assert er.status("u3").state == "registered"
-    assert er.status("u4").position == 1
+    assert er.status("u3") == UserStatus("registered")
+    assert er.status("u4") == UserStatus("waitlisted", 1)
 
     er.cancel("u2")
-    # Verify u4 took the last spot and waitlist is empty
-    assert er.status("u4").state == "registered"
-    assert len(er.snapshot()["waitlist"]) == 0
+    assert er.status("u4") == UserStatus("registered")
+    assert er.snapshot()["waitlist"] == []
+
 
 def test_cancel_waitlisted_does_not_trigger_promotion():
     er = EventRegistration(capacity=1)
+
     er.register("u1")
     er.register("u2")
     er.register("u3")
 
-    # u2 is between u1 and u3. Removing u2 should just slide u3 up.
     er.cancel("u2")
-    assert er.status("u1").state == "registered"
-    assert er.status("u3").position == 1
+
+    assert er.status("u1") == UserStatus("registered")
+    assert er.status("u3") == UserStatus("waitlisted", 1)
+    assert er.snapshot()["registered"] == ["u1"]
+    assert er.snapshot()["waitlist"] == ["u3"]
+
 
 def test_duplicate_after_promotion_is_rejected():
     er = EventRegistration(capacity=1)
+
     er.register("u1")
-    er.register("u2") # waitlisted
-    er.cancel("u1") # u2 promoted
+    er.register("u2")
+    er.cancel("u1")
 
     with pytest.raises(DuplicateRequest):
         er.register("u2")
 
+
 def test_status_none_for_unknown_user_does_not_change_state():
     er = EventRegistration(capacity=2)
+
     er.register("u1")
     initial_snap = er.snapshot()
-    
-    assert er.status("ghost").state == "none"
+
+    assert er.status("ghost") == UserStatus("none")
     assert er.snapshot() == initial_snap
+
 
 def test_invalid_user_id_rejected_empty_string():
     er = EventRegistration(capacity=1)
-    # Testing both empty and whitespace strings
+
     for invalid_id in ["", "   "]:
         with pytest.raises(ValueError):
             er.register(invalid_id)
 
+
 def test_invalid_capacity_negative_rejected():
-    # Enforces Requirement C6
     with pytest.raises(ValueError):
         EventRegistration(capacity=-5)
 
+
 def test_cancel_unknown_raises_notfound_if_required_by_tests():
     er = EventRegistration(capacity=1)
+
     with pytest.raises(NotFound):
         er.cancel("nobody")
