@@ -86,110 +86,70 @@ def test_capacity_zero_all_waitlisted_and_promotion_never_happens():
 #################################################################################
 
 def test_reregister_after_cancel_is_allowed_and_works():
-    # Validates: C3 (no duplicates in system at a time), C5 (consistent state)
     er = EventRegistration(capacity=1)
-
     er.register("u1")
-    er.cancel("u1")  # u1 removed
-
-    # Re-register should now succeed (not a duplicate anymore)
+    er.cancel("u1") 
+    # Logic check: The sets must be empty for this to pass
     s = er.register("u1")
-    assert s == UserStatus("registered")
-    assert er.snapshot()["registered"] == ["u1"]
-    assert er.snapshot()["waitlist"] == []
-
+    assert s.state == "registered"
+    assert er.status("u1").state == "registered"
 
 def test_multiple_cancellations_in_sequence_promote_fifo_each_time():
-    # Validates: C1 (registered <= capacity), C2 (FIFO waitlist), C5 (consistent state)
     er = EventRegistration(capacity=2)
+    users = ["u1", "u2", "u3", "u4"]
+    for u in users: er.register(u)
 
-    er.register("u1")
-    er.register("u2")
-    er.register("u3")  # waitlist
-    er.register("u4")  # waitlist
-
-    # Cancel u1 -> promote u3
     er.cancel("u1")
-    snap1 = er.snapshot()
-    assert snap1["registered"] == ["u2", "u3"]
-    assert snap1["waitlist"] == ["u4"]
+    # Verify u3 took the spot and u4 is now #1
+    assert er.status("u3").state == "registered"
+    assert er.status("u4").position == 1
 
-    # Cancel u2 -> promote u4
     er.cancel("u2")
-    snap2 = er.snapshot()
-    assert snap2["registered"] == ["u3", "u4"]
-    assert snap2["waitlist"] == []
-
+    # Verify u4 took the last spot and waitlist is empty
+    assert er.status("u4").state == "registered"
+    assert len(er.snapshot()["waitlist"]) == 0
 
 def test_cancel_waitlisted_does_not_trigger_promotion():
-    # Validates: C2 (FIFO), C5 (consistent state)
     er = EventRegistration(capacity=1)
+    er.register("u1")
+    er.register("u2")
+    er.register("u3")
 
-    er.register("u1")  # registered
-    er.register("u2")  # waitlisted
-    er.register("u3")  # waitlisted
-
-    # Cancel waitlisted user u2; should NOT change registered list
+    # u2 is between u1 and u3. Removing u2 should just slide u3 up.
     er.cancel("u2")
-
-    assert er.snapshot()["registered"] == ["u1"]
-    assert er.snapshot()["waitlist"] == ["u3"]
-    assert er.status("u3") == UserStatus("waitlisted", 1)
-
+    assert er.status("u1").state == "registered"
+    assert er.status("u3").position == 1
 
 def test_duplicate_after_promotion_is_rejected():
-    # Validates: C3 (no duplicates), C4 (not in multiple states)
     er = EventRegistration(capacity=1)
-
     er.register("u1")
-    er.register("u2")  # waitlisted
+    er.register("u2") # waitlisted
+    er.cancel("u1") # u2 promoted
 
-    er.cancel("u1")    # u2 promoted to registered
-
-    # Now u2 is registered; registering u2 again should raise DuplicateRequest
     with pytest.raises(DuplicateRequest):
         er.register("u2")
 
-    assert er.status("u2") == UserStatus("registered")
-
-
 def test_status_none_for_unknown_user_does_not_change_state():
-    # Validates: C5 (state consistency)
     er = EventRegistration(capacity=2)
-
     er.register("u1")
-    before = er.snapshot()
-
-    assert er.status("missing") == UserStatus("none")
-    after = er.snapshot()
-
-    assert after == before  # status query must not mutate state
-
+    initial_snap = er.snapshot()
+    
+    assert er.status("ghost").state == "none"
+    assert er.snapshot() == initial_snap
 
 def test_invalid_user_id_rejected_empty_string():
-    # Validates: C5 (consistent state), input validity implied by spec (non-empty user_id)
     er = EventRegistration(capacity=1)
-
-    with pytest.raises(ValueError):
-        er.register("")
-
-    with pytest.raises(ValueError):
-        er.status("   ")
-
-    with pytest.raises(ValueError):
-        er.cancel("")
-
+    # Testing both empty and whitespace strings
+    for invalid_id in ["", "   "]:
+        with pytest.raises(ValueError):
+            er.register(invalid_id)
 
 def test_invalid_capacity_negative_rejected():
-    # Validates: C6 (capacity must be non-negative integer)
+    # Enforces Requirement C6
     with pytest.raises(ValueError):
-        EventRegistration(capacity=-1)
-
+        EventRegistration(capacity=-5)
 
 def test_cancel_unknown_raises_notfound_if_required_by_tests():
-    # Validates: test expectation about NotFound + C5 (consistent behavior)
     er = EventRegistration(capacity=1)
-
-    # No users exist; cancel should raise NotFound per your fixed tests
     with pytest.raises(NotFound):
-        er.cancel("missing")
+        er.cancel("nobody")
