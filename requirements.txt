@@ -1,0 +1,76 @@
+## 1. Problem Understanding
+System purpose: A Python module to handle event registrations and waitlists for an event with a hard capacity limit.
+Inputs to the system: The event's capacity (set when initialized), and user IDs (strings) for registering, canceling, or checking status.
+Outputs produced by the system: The updated registered and waitlisted user lists, plus clear text messages explaining what the system just did (or why an error happened).
+Primary goal of the system: To manage event sign-ups and waitlist promotions automatically, while giving users clear, predictable feedback so they trust the system's decisions without getting spammed with notifications.
+
+## 2. Assumptions
+A1: Capacity is a fixed, non-negative integer set right at the start and doesn't change during execution.
+A2: User IDs are unique, non-empty strings.
+A3: Operations happen one at a time (sequentially), so we don't need to worry about concurrent operations causing race conditions.
+A4: If a user cancels, they are completely removed from the system, but they are allowed to try and register again later as a brand new request.
+A5: Status queries are strictly "read-only" and won't accidentally change the system state.
+A6: The system runs entirely in memory (no external database or persistent storage is used).
+
+## 3. Functional Requirements
+FR1: The system must accept a fixed capacity and allow users to register until it's full, putting anyone else on a strict FIFO waitlist.
+FR2: The system shall automatically promote the first person on the waitlist into a registered spot as soon as a registered user cancels. (Derived from Jane's need for automation).
+FR3: The system shall output a clear text explanation (e.g., "User promoted from waitlist") whenever an automatic promotion happens. (Derived from Mo's need for transparency).
+FR4: The system shall output a specific, readable error message when it rejects an action, rather than failing silently or just throwing a raw Python exception. (Derived from Mo's pain point regarding silent failures).
+FR5: The system shall process status queries quietly, returning the result without triggering state-change notifications. (Derived from Jane's pain point regarding notification overload).
+FR6: The system shall handle requests in a strict sequential order to ensure deterministic, predictable behavior. (Derived from Mo's need for determinism).
+
+## 4. System Constraints
+C1: The system must promote the earliest waitlisted user automatically when a spot opens up, without waiting for manual confirmation.
+Derived from persona attribute: Jane - Needs automatic conflict handling.
+C2: The system must output an explicit text explanation whenever a waitlist promotion is triggered.
+Derived from persona attribute: Mo - Needs clear explanations when waitlist promotions occur.
+C3: The system must return a clear text error message if a user tries an invalid action, like registering twice.
+Derived from persona attribute: Mo - Needs explicit handling of edge cases instead of silent failure.
+C4: If someone tries to cancel a user that isn't in the system, it must output a "User not found" error instead of just ignoring the request.
+Derived from persona attribute: Mo - Pain point is silent failures.
+C5: Query operations must strictly return status without generating any side-effect notifications.
+Derived from persona attribute: Jane - Pain point is receiving duplicate system messages.
+C6: The system must enforce strict FIFO ordering by processing all operations sequentially.
+Derived from persona attribute: Mo - Needs deterministic system behavior under ties.
+
+## 5. Acceptance Criteria
+AC1: Given the event is full and User A is waitlisted, When a registered user cancels, Then User A is automatically promoted and the system outputs a message explaining the promotion.
+AC2: Given User B is already registered, When User B tries to register again, Then the system rejects it, keeps the state the same, and returns an explicit error message.
+AC3: Given User C isn't registered or waitlisted, When User C tries to cancel, Then the system outputs an explicit "User not found" error.
+AC4: Given the event capacity is 0, When users try to register, Then everyone goes straight to the waitlist in the exact order they applied.
+AC5: Given a user asks for their status, When the system processes it, Then it just returns the status without changing any lists or triggering notifications.
+AC6: Given a waitlisted user cancels, When the system processes the cancellation, Then they are removed from the waitlist without accidentally triggering a promotion.
+
+## 6. Edge Cases 
+EC1: An already registered user tries to register again. (Derived from Constraint C3 - Mo)
+Expected system behavior: The system blocks the duplicate registration, leaves the lists alone, and returns a clear error message.
+EC2: A cancellation is requested for a user ID that doesn't exist. (Derived from Constraint C4 - Mo)
+Expected system behavior: The system ignores the cancellation but explicitly returns a "User not found" error so it doesn't fail silently.
+EC3: A user spams the status query multiple times in a row. (Derived from Constraint C5 - Jane)
+Expected system behavior: The system simply returns their status each time without generating any spammy notifications or altering the state.
+EC4: The event capacity is initialized to exactly 0. 
+Expected system behavior: The registration phase is completely skipped, and all incoming users are immediately tossed onto the waitlist in FIFO order.
+
+## 7. Traceability
+$FR\rightarrow C\rightarrow AC$ mapping
+FR2 -> C1 -> AC1
+FR3 -> C2 -> AC1
+FR4 -> C3 -> AC2
+FR4 -> C4 -> AC3
+FR5 -> C5 -> AC5
+FR6 -> C6 -> AC4
+
+## Revision Notes
+
+Revision Note 1
+Requirement updated: FR3 and C2 (Clarification)
+Reason: During requirement review, the LLM identified a paradox where outputting explanations for Mo might inadvertently cause the "notification overload" that Jane hates.
+Triggered by LLM feedback: Yes
+Action: Clarified that "output" means the module explicitly returns a text string as part of its return object for the calling code to handle, and does NOT trigger an automatic push notification or interrupt.
+
+Revision Note 2
+Requirement updated: EC5 (New Edge Case Added)
+Reason: The LLM identified an ambiguity regarding what the system should do if a status query is made for a user ID that does not exist in the system.
+Triggered by LLM feedback: Yes
+Action: Added an explicit rule that querying an unknown user returns a safe "none" status string rather than throwing an error or creating a new record.

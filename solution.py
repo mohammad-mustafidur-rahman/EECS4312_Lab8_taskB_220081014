@@ -44,7 +44,7 @@ class DuplicateRequest(Exception):
 
 
 class NotFound(Exception):
-    """Raised if a user cannot be found for cancellation (if required by handout)."""
+    """Raised if a user cannot be found for cancellation."""
     pass
 
 
@@ -70,8 +70,9 @@ class EventRegistration:
     def register(self, user_id: str) -> UserStatus:
         self._validate_user_id(user_id)
 
+        # C3: Explicit error message for duplicate registration
         if user_id in self._registered_set or user_id in self._waitlist_set:
-            raise DuplicateRequest(f"user '{user_id}' already exists")
+            raise DuplicateRequest(f"Registration failed: user '{user_id}' is already in the system.")
 
         if len(self._registered) < self._capacity:
             self._registered.append(user_id)
@@ -79,35 +80,57 @@ class EventRegistration:
             self._assert_invariants()
             return UserStatus(state="registered")
 
+        # FIFO Waitlist logic
         self._waitlist.append(user_id)
         self._waitlist_set.add(user_id)
         self._assert_invariants()
         return UserStatus(state="waitlisted", position=len(self._waitlist))
 
-    def cancel(self, user_id: str) -> None:
+    def cancel(self, user_id: str) -> str:
+        """
+        Cancels a user and returns an explicit text explanation of the resulting state.
+        """
         self._validate_user_id(user_id)
 
         if user_id in self._registered_set:
             self._registered.remove(user_id)
             self._registered_set.remove(user_id)
-            self._promote_next()
+            
+            # C2: Capture the promotion message if one occurs
+            promotion_msg = self._promote_next()
+            self._assert_invariants()
+            
+            base_msg = f"User '{user_id}' cancelled successfully."
+            return f"{base_msg} {promotion_msg}" if promotion_msg else base_msg
+
         elif user_id in self._waitlist_set:
             self._waitlist.remove(user_id)
             self._waitlist_set.remove(user_id)
+            self._assert_invariants()
+            return f"User '{user_id}' removed from waitlist."
+        
         else:
-            raise NotFound(f"user '{user_id}' not found")
+            # C4: Explicit error for non-existent users
+            raise NotFound(f"Cancellation failed: User '{user_id}' not found.")
 
-        self._assert_invariants()
-
-    def _promote_next(self) -> None:
-        """Move the first waitlisted user into registered if space is available."""
+    def _promote_next(self) -> Optional[str]:
+        """
+        Moves the first waitlisted user into registered if space is available.
+        Returns a text explanation string if a promotion occurs.
+        """
         if self._waitlist and len(self._registered) < self._capacity:
             promoted_user = self._waitlist.pop(0)
             self._waitlist_set.remove(promoted_user)
             self._registered.append(promoted_user)
             self._registered_set.add(promoted_user)
+            return f"Waitlisted user '{promoted_user}' has been automatically promoted to registered status."
+        return None
 
     def status(self, user_id: str) -> UserStatus:
+        """
+        C5: Query operations return status without generating side-effects.
+        Returns state='none' for unknown users to avoid silent failure without crashing.
+        """
         self._validate_user_id(user_id)
 
         if user_id in self._registered_set:
@@ -132,6 +155,7 @@ class EventRegistration:
             raise ValueError("user_id must be a non-empty string")
 
     def _assert_invariants(self) -> None:
+        # C6: Strict checks to ensure deterministic and consistent behavior
         assert len(self._registered) <= self._capacity
         assert self._registered_set.isdisjoint(self._waitlist_set)
         assert len(self._registered_set) == len(self._registered)

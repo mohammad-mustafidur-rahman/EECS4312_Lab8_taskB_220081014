@@ -1,0 +1,81 @@
+Prompt 1:Hi, How are you doing?
+I am working on a software requirements lab. I have two user personas for an event registration and waitlist system.
+Persona 1 (Jane): A busy professional who needs predictable ordering, automatic conflict handling, and no notification overload. Persona 2 (Mo): An edge user with accessibility needs who needs deterministic behavior, explicit explanations for system decisions, and no silent failures.
+I need to brainstorm 'system constraints', which are defined as testable properties of system behavior. Please do not write a table or final constraints for me. Instead, act as my brainstorming partner.
+Purpose: To brainstorm specific, testable edge cases where the system would need a deterministic tie-breaking rule to satisfy Mo's needs.
+Response summary: The LLM suggested three tie scenarios: simultaneous registration requests for the final available seat, users with identical priority levels on the waitlist, and conflicting simultaneous automated actions (like promoting and canceling at the exact same time).
+LLM complete response: Hey there! I'm doing great, thanks for asking. I'm feeling sharp and ready to dive into some requirements engineering with you.
+
+It sounds like you’ve got two really distinct perspectives here. Jane is all about efficiency and flow, while Mo is all about transparency and trust. When those two worlds collide in a "system constraint," you usually end up with a system that is robust because it can't afford to be "magical" or "vague."
+
+Since we’re brainstorming, let's look at the friction points between their needs. Here are a few angles we could explore to find those testable constraints:
+
+1. The "Waitlist Logic" Angle
+Jane wants predictable ordering (first-in, first-out), but Mo needs to know why the system made a decision.
+The Brainstorm: If Jane is moved from the waitlist to "Registered," how do we define the system's "explanation" so it satisfies Mo without becoming the "notification overload" Jane hates?
+Think about: Time-stamping, position numbering, or logic logs.
+2. Conflict Handling & Failure
+Jane wants the system to handle conflicts automatically. Mo, however, cannot have "silent failures."
+The Brainstorm: If Jane has a double-booking, and the system "fixes" it for her, what is the testable threshold for an "explicit explanation"?
+Think about: Does the system need to log a specific error code or reason for every automated change?
+3. Determinism vs. Predictability
+Both users want the system to behave the same way every time.
+The Brainstorm: In a high-traffic event registration scenario (like a "drop" at 9:00 AM), how do we ensure the system doesn't have race conditions?
+Think about: Response times under load or the sequence of database commits. If two people click "Register" at the exact same millisecond, what is the tie-breaker?
+4. Accessibility as a Constraint
+Since Mo is an edge user with accessibility needs, "accessibility" isn't just a feature; it's a behavior.
+The Brainstorm: How do we constrain the "Automatic Conflict Handling" Jane likes so it doesn't break screen readers or keyboard navigation?
+Think about: Focus management after an automated update or time-limits for session timeouts.
+Where should we start digging? Does one of these angles feel more "testable" to you for your lab, or should we look at a specific scenario—like what happens the moment a spot opens up on the waitlist?
+
+Prompt 2: Mo needs 'deterministic system behavior under ties.' Can you brainstorm 3 specific scenarios in an event registration system where a 'tie' might happen?
+Purpose: To identify potential failure points or missing constraints in the automated waitlist promotion feature that Jane relies on.
+Response summary: The LLM identified edge cases that could break automation, such as race conditions creating "ghost spots," time-zone conflicts, circular dependencies with class prerequisites, and expired payment methods blocking an automatic promotion.
+LLM complete response: That is a great focus area. For someone like Mo, "determinism" means that if the exact same inputs are provided, the exact same output occurs—there’s no "luck of the draw" or hidden "coin flip" inside the code.
+
+In a high-concurrency environment like event registration, "ties" are the ultimate test of that determinism. Here are three specific scenarios where the system has to break a tie:
+
+1. The "Split-Second" Final Seat
+Imagine an event has exactly one seat left. Jane and another user both hit the "Confirm Registration" button at what appears to be the exact same time.
+The Conflict: On a network level, these requests might arrive at the server within microseconds of each other.
+The Mo Perspective: If the system doesn't have a clear, documented tie-breaking rule (like a sequential database ID or a global atomic clock), the result can feel arbitrary or like a "silent failure" to the person who lost the seat.
+2. Identical Waitlist Priority
+Suppose your system allows users to have "Priority Status" (e.g., VIPs or early-access members).
+The Conflict: Two users with the exact same priority level join the waitlist. A spot opens up. If the system only looks at "Priority Level," it sees two identical candidates.
+The Mo Perspective: Mo needs to know why the other person got the spot. A deterministic constraint here might involve a secondary "tie-breaker" attribute, such as the exact millisecond of account creation or alphabetical order, which must be explicitly citeable in the system's explanation.
+3. Simultaneous Conflict Resolution
+Jane loves "automatic conflict handling." Imagine she is on a waitlist for Event A, which starts at 2:00 PM. She is already registered for Event B, which also starts at 2:00 PM.
+The Conflict: At the exact moment a spot opens for Event A, the system's automated logic tries to "promote" her from the waitlist while simultaneously trying to "cancel" her conflicting registration for Event B.
+The Mo Perspective: If two automated processes (the "Promoter" and the "Canceller") trigger at once, which one "wins" the write-access to the database? Without determinism, the system might crash or end up in an inconsistent state where she is registered for both or neither.
+Which of these feels the most "testable" for your lab? To make these into system constraints, we’d need to define exactly how the system "decides" in these moments. Would you like to try drafting a testable rule for the "Split-Second Final Seat" scenario?
+
+Prompt 3: If Jane trusts the system to automatically handle waitlist promotions, what are some weird edge cases where an automatic promotion might fail or cause a bad system state?
+Purpose: To explore the tension between the two personas' conflicting needs and brainstorm constraints that satisfy both without compromising either.
+Response summary: The LLM highlighted the conflict of "Information Density" and suggested a "Progressive Disclosure" approach, where the system provides concise notifications for Jane but keeps detailed, accessible history logs for Mo.
+LLM complete response: When Jane hands over the keys to the system for "automatic promotion," she’s trusting it to be her personal assistant. But in software, "automatic" often means the system is making assumptions. For Mo, these assumptions are dangerous if they aren't explained; for Jane, they're dangerous if they create a mess she has to clean up later.
+
+Here are some "weird" edge cases where the logic might trip over itself:
+
+1. The "Circular Dependency" Trap
+Imagine Jane is on the waitlist for Workshop A (which requires Intro Class B as a prerequisite). She is also on the waitlist for Intro Class B.
+The Scenario: A spot opens in the advanced Workshop A. The system's "promotion logic" triggers. It sees Jane is next in line, but then it checks her credentials and sees she hasn't completed Intro Class B yet (because she's still on that waitlist).
+The Failure: Does the system skip her? Does it promote her and then "silently fail" the registration later? Or does it promote her for both simultaneously, risking a state where she’s in the advanced class without the foundation?
+2. The "Ghost Spot" Race Condition
+This happens when the system's "Available Seats" counter gets out of sync with the actual "Registered Users" list.
+The Scenario: A user cancels their registration at the exact same millisecond the system is running a database backup or a batch update.
+The Failure: The system "sees" a vacancy and promotes Jane. However, because of a slight lag in database replication, the "seat" wasn't actually committed as empty yet. Jane receives a "You're In!" notification, but when she logs in, the system shows her as "Waitlisted" again because the seat "disappeared." This is a nightmare for Mo's need for deterministic behavior.
+3. The "Time-Zone Teleportation" Conflict
+Jane is a busy professional who travels. She registers for an event in New York (EST) at 10:00 AM. While on the waitlist for a second event in London (GMT), a spot opens up.
+The Scenario: If the system’s "Automatic Conflict Handling" doesn't account for UTC offsets or travel time, it might see a 10:00 AM and a 3:00 PM event as perfectly fine.
+The Failure: Jane gets promoted to an event she physically cannot attend because the system only checked the numerical time, not the absolute time. Now she’s registered for something she’ll have to manually cancel, violating her "no notification/task overload" preference.
+4. The "Expired Payment Token" Loop
+Jane might have a saved credit card for "automatic" payments upon promotion.
+The Scenario: A spot opens up, the system promotes her, and it attempts to charge the card. The card is expired.
+The Failure: Since Jane wants "automatic conflict handling" and "no overload," the system might try to "fix" it by retrying. If it fails three times, does it kick her off the list? Mo would demand to know exactly why she was kicked, while Jane would be annoyed she had to deal with a "system failure" she thought was automated.
+Does one of these spark a specific "testable property" for you? For example, we could write a constraint about how the system must validate prerequisites before attempting a promotion to avoid the "Circular Dependency" trap.
+
+Would you like to try defining what "deterministic behavior" looks like for that Time-Zone or Payment scenario?
+
+Prompt 4: How might Jane's desire for 'minimal interaction' conflict with Mo's need for 'explicit explanations'? How can a system balance both?
+Purpose: To explore the tension between the two personas' conflicting needs and brainstorm constraints that satisfy both without compromising either.
+Response summary: The LLM highlighted the conflict of "Information Density" and suggested a "Progressive Disclosure" approach, where the system provides concise notifications for Jane but keeps detailed, accessible history logs for Mo.
